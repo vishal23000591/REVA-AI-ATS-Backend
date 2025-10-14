@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pymongo
+python-dotenv
+pdfminer.six
+python-docx
+spacy
+sentence-transformers
+
+python-multipart
+fuzzywuzzy
+PyMuPDF
+python-Levenshtein
+pytesseract
