@@ -28,7 +28,7 @@ app = FastAPI(title="Reva AI ATS Backend")
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5176", "http://localhost:3000", "https://reva-ai-ats-frontend.vercel.app""],
+    allow_origins=["http://localhost:5176", "http://localhost:3000", "https://reva-ai-ats-frontend.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
