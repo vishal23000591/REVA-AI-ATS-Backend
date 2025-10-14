@@ -1,6 +1,7 @@
 import re
 import os
 import tempfile
+import spacy
 from pdfminer.high_level import extract_text
 from docx import Document
 import pytesseract
