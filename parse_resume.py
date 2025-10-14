@@ -6,21 +6,33 @@ from docx import Document
 import pytesseract
 from PIL import Image
 import fitz  # PyMuPDF
-import spacy
+import threading
 from sentence_transformers import SentenceTransformer, util
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from fuzzywuzzy import fuzz
 
-# -------------------- Setup --------------------
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    os.system("python -m spacy download en_core_web_sm")
-    nlp = spacy.load("en_core_web_sm")
+# -------------------- Lazy-loaded models --------------------
+nlp = None
+sbert = None
 
-sbert = SentenceTransformer("all-MiniLM-L6-v2")
+def get_nlp():
+    global nlp
+    if nlp is None:
+        try:
+            nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            os.system("python -m spacy download en_core_web_sm")
+            nlp = spacy.load("en_core_web_sm")
+    return nlp
 
+def get_sbert():
+    global sbert
+    if sbert is None:
+        sbert = SentenceTransformer("all-MiniLM-L6-v2")
+    return sbert
+
+# -------------------- Regex --------------------
 EMAIL_RE = re.compile(r"[\w\.-]+@[\w\.-]+\.\w+")
 PHONE_RE = re.compile(r"(\+?\d[\d\-\s\(\)]{7,}\d)")
 
@@ -32,17 +44,12 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 def read_file_text(path: str) -> str:
-    """
-    Extract full text from PDF, DOCX, or TXT.
-    Uses PDFMiner for text, fallback to OCR if needed.
-    """
     text = ""
     if path.lower().endswith(".pdf"):
         try:
             text = extract_text(path).strip()
         except:
             text = ""
-        # Use OCR on pages if text is missing
         try:
             doc = fitz.open(path)
             for page in doc:
@@ -57,7 +64,6 @@ def read_file_text(path: str) -> str:
                 text += "\n" + page_text
         except:
             pass
-
     elif path.lower().endswith(".docx"):
         try:
             doc = Document(path)
@@ -70,7 +76,6 @@ def read_file_text(path: str) -> str:
                 text = f.read()
         except:
             pass
-
     return clean_text(text)
 
 def split_into_sections(text: str) -> dict:
@@ -101,9 +106,6 @@ def split_into_sections(text: str) -> dict:
     return sections
 
 def extract_skills_from_text(text: str, job_keywords: list) -> list:
-    """
-    Extract skills only by checking presence of job keywords in resume.
-    """
     found = set()
     text_lower = text.lower()
     for kw in job_keywords:
@@ -114,9 +116,6 @@ def extract_skills_from_text(text: str, job_keywords: list) -> list:
 
 # -------------------- Scoring --------------------
 def fuzzy_keyword_score(resume_text: str, job_keywords: list, threshold=70) -> float:
-    """
-    Match resume text to job keywords using fuzzy ratio.
-    """
     if not job_keywords:
         return 0.0
     matches = 0
@@ -133,22 +132,18 @@ def fuzzy_keyword_score(resume_text: str, job_keywords: list, threshold=70) -> f
     return matches / len(job_keywords)
 
 def semantic_score(resume_text: str, job_keywords: list) -> float:
-    """
-    Semantic similarity between resume text and job keywords.
-    """
     if not job_keywords:
         return 0.0
-    sentences = [sent.text for sent in nlp(resume_text).sents if len(sent.text.strip()) > 5]
-    emb_sentences = sbert.encode(sentences, convert_to_tensor=True)
-    emb_keywords = sbert.encode(job_keywords, convert_to_tensor=True)
+    nlp_model = get_nlp()
+    sbert_model = get_sbert()
+    sentences = [sent.text for sent in nlp_model(resume_text).sents if len(sent.text.strip()) > 5]
+    emb_sentences = sbert_model.encode(sentences, convert_to_tensor=True)
+    emb_keywords = sbert_model.encode(job_keywords, convert_to_tensor=True)
     sim_matrix = util.cos_sim(emb_sentences, emb_keywords)
     max_per_kw = sim_matrix.max(dim=0)[0]
     return float(max_per_kw.mean())
 
 def tfidf_similarity(resume_text: str, job_text: str) -> float:
-    """
-    Cosine similarity between resume and job description.
-    """
     try:
         vect = TfidfVectorizer(stop_words="english", ngram_range=(1,2))
         X = vect.fit_transform([resume_text, job_text])
@@ -158,9 +153,6 @@ def tfidf_similarity(resume_text: str, job_text: str) -> float:
 
 # -------------------- Resume Summary --------------------
 def summarize_resume(text: str, job_keywords: list) -> str:
-    """
-    Generate a short bullet-point resume summary dynamically.
-    """
     bullets = []
     text_lower = text.lower()
 
@@ -219,10 +211,8 @@ def parse_resume_and_score(path: str, job_description: str = "", job_keywords: l
     job_keywords = job_keywords or []
     job_description = job_description or ""
 
-    # Extract skills based on job keywords
     skills_list = extract_skills_from_text(full_text, job_keywords)
 
-    # Scores
     kscore = fuzzy_keyword_score(full_text, job_keywords)
     sscore = semantic_score(full_text, job_keywords)
     tfidf_score = tfidf_similarity(full_text, job_description)
@@ -230,12 +220,9 @@ def parse_resume_and_score(path: str, job_description: str = "", job_keywords: l
     final_score = (weights["keyword"] * kscore +
                    weights["semantic"] * sscore +
                    weights["tfidf"] * tfidf_score)
-
-    # 🔥 Boost score if most keywords matched
     if kscore > 0.8:
         final_score = min(final_score * 1.15, 1.0)
 
-    # Summary
     summary_text = summarize_resume(full_text, job_keywords)
 
     return {
@@ -252,3 +239,8 @@ def parse_resume_and_score(path: str, job_description: str = "", job_keywords: l
         "full_text": full_text,
         "resume_summary": summary_text
     }
+
+# Optional: preload models in background (non-blocking)
+def preload_models():
+    threading.Thread(target=get_nlp).start()
+    threading.Thread(target=get_sbert).start()

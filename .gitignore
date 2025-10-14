@@ -1,0 +1,10 @@
+# Ignore virtual environment
+venv/
+
+# Ignore model files
+*.pt
+*.pkl
+*.h5
+*.onnx
+*.safetensors
+models/
