@@ -28,7 +28,11 @@ app = FastAPI(title="Reva AI ATS Backend")
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5176", "http://localhost:3000", "https://reva-ai-ats-frontend.vercel.app"],
+    allow_origins=[
+        "http://localhost:5176",
+        "http://localhost:3000",
+        "https://reva-ai-ats-frontend.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -95,14 +99,14 @@ async def upload_resume(file: UploadFile = File(...), job_id: str = Form(...)):
         resumes.insert_one(parsed)
 
         return JSONResponse({
-    "status": "ok",
-    "score": parsed.get("score", 0),
-    "breakdown": parsed.get("breakdown", {}),
-    "email": parsed.get("email"),
-    "phone": parsed.get("phone"),
-    "skills": parsed.get("skills"),
-    "resume_summary": parsed.get("resume_summary", "")  # <-- send full summary
-})
+            "status": "ok",
+            "score": parsed.get("score", 0),
+            "breakdown": parsed.get("breakdown", {}),
+            "email": parsed.get("email"),
+            "phone": parsed.get("phone"),
+            "skills": parsed.get("skills"),
+            "resume_summary": parsed.get("resume_summary", "")
+        })
 
     finally:
         shutil.rmtree(tmpdir)
