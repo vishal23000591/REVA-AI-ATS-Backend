@@ -8,7 +8,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from parse_resume import parse_resume_and_score
 
-# Load environment variables
+# -------------------- Load environment variables --------------------
 load_dotenv()
 MONGO_URI = os.getenv(
     "MONGO_URI",
@@ -16,35 +16,30 @@ MONGO_URI = os.getenv(
 )
 DB_NAME = os.getenv("DB_NAME", "test")
 
-# MongoDB connection
+# -------------------- MongoDB connection --------------------
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 jobs = db.jobs
 resumes = db.resumes
 
-# FastAPI app
+# -------------------- FastAPI app --------------------
 app = FastAPI(title="Reva AI ATS Backend")
 
-# CORS middleware
+# -------------------- CORS middleware --------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5176",
-        "http://localhost:3000",
-        "https://reva-ai-ats-frontend.vercel.app",
-        "*"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+allow_origins=[
+    "http://localhost:5176",  # React dev server
+    "http://localhost:3000",  # Next.js dev server
+]
 )
 
+# -------------------- Root --------------------
 @app.get("/")
 def root():
     return {"message": "Backend running successfully 🚀"}
 
-# ------------------ JOB ENDPOINTS ------------------
-
+# -------------------- JOB ENDPOINTS --------------------
 @app.post("/add_job")
 async def add_job(
     title: str = Form(...),
@@ -70,8 +65,7 @@ async def list_jobs():
             j["keywords"] = []
     return jobs_list
 
-# ------------------ RESUME ENDPOINT ------------------
-
+# -------------------- RESUME ENDPOINT --------------------
 @app.post("/upload_resume")
 async def upload_resume(file: UploadFile = File(...), job_id: str = Form(...)):
     # Fetch job details from DB
